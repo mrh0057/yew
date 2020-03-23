@@ -65,6 +65,7 @@ where
     COMP: Component,
 {
     fn from(vchild: VChild<COMP>) -> Self {
+        log::info!("Creating from vchild!");
         VComp::new::<COMP>(vchild.props, vchild.node_ref)
     }
 }
@@ -101,6 +102,7 @@ impl VComp {
     where
         COMP: Component,
     {
+        log::info!("Creating a new VComp! {}", node_ref.strong_count());
         let node_ref_clone = node_ref.clone();
         let generator = move |generator_type: GeneratorType| -> Mounted {
             match generator_type {
@@ -113,7 +115,7 @@ impl VComp {
                         node_ref_clone.clone(),
                         props.clone(),
                     );
-
+                    log::info!("VComp node_ref_count {}", node_ref_clone.strong_count());
                     Mounted {
                         node_ref: node_ref_clone.clone(),
                         scope: scope.clone().into(),
@@ -123,7 +125,7 @@ impl VComp {
                 GeneratorType::Overwrite(hidden_scope) => {
                     let mut scope: Scope<COMP> = hidden_scope.into();
                     scope.update(ComponentUpdate::Properties(props.clone()));
-
+                    log::info!("Overwritting {}", node_ref_clone.strong_count());
                     Mounted {
                         node_ref: node_ref_clone.clone(),
                         scope: scope.clone().into(),
@@ -153,6 +155,7 @@ impl Unmounted {
     fn replace(self, old: Mounted) -> Mounted {
         (self.generator)(GeneratorType::Overwrite(old.scope))
     }
+
 }
 
 enum Reform {
@@ -164,10 +167,17 @@ impl VDiff for VComp {
     fn detach(&mut self, _parent: &Element) -> Option<Node> {
         let mut replace_state = MountState::Detached;
         swap(&mut replace_state, &mut self.state);
+        log::info!("Detaching the vnode");
         match replace_state {
             MountState::Mounted(this) => {
+                if let Some(node) = this.node_ref.get() {
+                    log::info!("Detach: The vnode has a value!");
+                } else {
+                    log::info!("Detach: The vnode is missing a value!");
+                }
+                let next_node = this.node_ref.get().and_then(|node| node.next_sibling());
                 (this.destroyer)();
-                this.node_ref.get().and_then(|node| node.next_sibling())
+                next_node
             }
             _ => None,
         }
@@ -179,6 +189,7 @@ impl VDiff for VComp {
         previous_sibling: Option<&Node>,
         ancestor: Option<VNode>,
     ) -> Option<Node> {
+        log::info!("Rendering Comp");
         let mut replace_state = MountState::Mounting;
         swap(&mut replace_state, &mut self.state);
         if let MountState::Unmounted(this) = replace_state {
@@ -187,6 +198,7 @@ impl VDiff for VComp {
                     // If the ancestor is a Component of the same type, don't replace, keep the
                     // old Component but update the properties.
                     if self.type_id == vcomp.type_id {
+                        log::info!("Reusing the component.");
                         let mut replace_state = MountState::Overwritten;
                         swap(&mut replace_state, &mut vcomp.state);
                         match replace_state {
@@ -194,6 +206,15 @@ impl VDiff for VComp {
                             _ => Reform::Before(None),
                         }
                     } else {
+                        if let Some(node) = vcomp.node_ref.get() {
+                            log::info!("Reform: Node has a value");
+                        } else {
+                            log::info!("Reform: Node doesn't have a value! {}", vcomp.node_ref.strong_count());
+                        }
+                        if let Some(f) = parent.first_child() {
+                            log::info!("Reform: Have the first child");
+                        } else {
+                        }
                         Reform::Before(vcomp.detach(parent))
                     }
                 }
@@ -204,11 +225,17 @@ impl VDiff for VComp {
             let mounted = match reform {
                 Reform::Keep(mounted) => {
                     // Send properties update when the component is already rendered.
+                    if let Some(node) = mounted.node_ref.get() {
+                        log::info!("Found a ref");
+                    } else {
+                        log::info!("Boo no ref");
+                    }
                     this.replace(mounted)
                 }
                 Reform::Before(next_sibling) => {
                     let dummy_node = document().create_text_node("");
                     if let Some(next_sibling) = next_sibling {
+                        log::info!("Using next sibling");
                         let next_sibling = &next_sibling;
                         #[cfg(feature = "web_sys")]
                         let next_sibling = Some(next_sibling);
@@ -218,6 +245,7 @@ impl VDiff for VComp {
                     } else if let Some(next_sibling) =
                         previous_sibling.and_then(|p| p.next_sibling())
                     {
+                        log::info!("Using previous sibling");
                         let next_sibling = &next_sibling;
                         #[cfg(feature = "web_sys")]
                         let next_sibling = Some(next_sibling);
@@ -230,6 +258,7 @@ impl VDiff for VComp {
                             allow(clippy::let_unit_value, unused_variables)
                         )]
                         {
+                            log::info!("Append node to parent. {}", self.node_ref.strong_count());
                             let result = parent.append_child(&dummy_node);
                             #[cfg(feature = "web_sys")]
                             result.expect("can't append node to parent");
@@ -238,7 +267,6 @@ impl VDiff for VComp {
                     this.mount(parent.to_owned(), dummy_node)
                 }
             };
-
             self.state = MountState::Mounted(mounted);
         }
         None

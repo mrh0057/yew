@@ -124,6 +124,7 @@ where
     COMP: Component,
 {
     fn from(vchild: VChild<COMP>) -> Self {
+        log::info!("from vchild being called");
         VNode::VComp(VComp::from(vchild))
     }
 }

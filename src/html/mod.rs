@@ -232,6 +232,7 @@ where
 {
     /// Create children
     pub fn new(children: Vec<T>) -> Self {
+        log::info!("Creating a new children node");
         Self { children }
     }
 
@@ -359,6 +360,10 @@ impl NodeRef {
     /// Link a downstream `NodeRef`
     pub(crate) fn link(&self, node_ref: Self) {
         self.0.borrow_mut().link = Some(node_ref);
+    }
+
+    pub(crate) fn strong_count(&self) -> usize {
+        Rc::strong_count(&self.0)
     }
 }
 

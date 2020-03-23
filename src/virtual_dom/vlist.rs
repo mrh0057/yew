@@ -2,6 +2,7 @@
 use super::{VDiff, VNode, VText};
 use cfg_if::cfg_if;
 use std::ops::{Deref, DerefMut};
+
 cfg_if! {
     if #[cfg(feature = "std_web")] {
         use stdweb::web::{Element, Node};
@@ -77,6 +78,18 @@ impl VDiff for VList {
         ancestor: Option<VNode>,
     ) -> Option<Node> {
         // Reuse previous_sibling, because fragment reuse parent
+        let mut first_tab = parent.has_attribute("my_first_tab");
+        if first_tab {
+            log::info!("Rendering first tab.");
+        }
+        let second_tab = parent.has_attribute("my_second_tab");
+        if second_tab {
+            log::info!("Rendering second tab");
+        }
+        let first_tab = first_tab || second_tab;
+        if first_tab {
+            log::info!("Processing VList");
+        }
         let mut previous_sibling = previous_sibling.cloned();
         let mut rights = {
             match ancestor {
@@ -94,10 +107,20 @@ impl VDiff for VList {
             }
         };
 
+        if self.children.is_empty() && first_tab {
+            log::info!("Children is empty.");
+        }
+        if self.elide_placeholder && first_tab {
+            log::info!("elide placeholder set.");
+        }
+
         if self.children.is_empty() && !self.elide_placeholder {
             // Without a placeholder the next element becomes first
             // and corrupts the order of rendering
             // We use empty text element to stake out a place
+            if first_tab {
+                log::info!("Setting a placeholder.");
+            }
             let placeholder = VText::new("".into());
             self.children.push(placeholder.into());
         }
@@ -105,15 +128,69 @@ impl VDiff for VList {
         // Process children
         let mut lefts = self.children.iter_mut();
         let mut rights = rights.drain(..);
+        let mut executing_count = 0;
         loop {
+            if first_tab {
+                log::info!("execution number: {}", executing_count);
+            }
+            executing_count += 1;
             match (lefts.next(), rights.next()) {
                 (Some(left), Some(right)) => {
+                    if first_tab {
+                        log::info!("Left and right has values");
+                        match &left {
+                            VNode::VRef(vref) => {
+                                log::info!("Left and Right: let VRef");
+                            }
+                            VNode::VComp(comp) => {
+                                log::info!("Left and Right: left VComp");
+                            }
+                            VNode::VTag(tag) => {
+                                if tag.attributes.contains_key("my_h1") {
+                                    log::info!("Left and right: left tag");
+                                }
+                            }
+                            _ => {
+                                //
+                            }
+                        }
+                        match &right {
+                            VNode::VComp(comp) => {
+                                log::info!("Left and Right: right VComp");
+                            }
+                            VNode::VTag(tag) => {
+                                if tag.attributes.contains_key("my_h1") {
+                                    log::info!("Left and right: right tag");
+                                }
+                            }
+                            _ => {
+                                
+                            }
+                        }
+                    }
                     previous_sibling = left.apply(parent, previous_sibling.as_ref(), Some(right));
                 }
                 (Some(left), None) => {
+                    if first_tab {
+                        log::info!("left is something");
+                        match &left {
+                            VNode::VComp(comp) => {
+                                log::info!("Left: left VComp");
+                            }
+                            VNode::VTag(tag) => {
+                                log::info!("Vtag")
+                            }
+                            _ => {
+                                //
+                            }
+                        }
+                    }
                     previous_sibling = left.apply(parent, previous_sibling.as_ref(), None);
                 }
                 (None, Some(ref mut right)) => {
+                    if first_tab {
+                        log::info!("Removing parent.  No children.");
+                    }
                     right.detach(parent);
                 }
                 (None, None) => break,

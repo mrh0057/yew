@@ -103,6 +103,21 @@ impl<COMP: Component> Scope<COMP> {
     /// Schedules a task to destroy a component
     pub(crate) fn destroy(&mut self) {
         let shared_state = self.shared_state.clone();
+        match &*shared_state.borrow() {
+            ComponentState::Created(created) => {
+                if let Some(next) = created.node_ref.get().and_then(|node| node.next_sibling()) {
+                    log::info!("Yay found next sibling {}", created.node_ref.strong_count());
+                }
+                if let Some(node) = created.node_ref.get() {
+                    log::info!("Yay found a node in Destroy! {}", created.node_ref.strong_count());
+                } else {
+                    log::info!("Boo didn't find a node");
+                }
+            }
+            _ => {
+                
+            }
+        }
         let destroy = DestroyComponent { shared_state };
         scheduler().push(Box::new(destroy));
     }
@@ -199,7 +214,9 @@ struct CreatedState<COMP: Component> {
 impl<COMP: Component> CreatedState<COMP> {
     /// Called once immediately after the component is created.
     fn mounted(mut self) -> Self {
+        log::info!("Created State: {}", self.node_ref.strong_count());
         if self.component.mounted() {
+            log::info!("Mounting component");
             self.update()
         } else {
             self
@@ -207,14 +224,17 @@ impl<COMP: Component> CreatedState<COMP> {
     }
 
     fn update(mut self) -> Self {
+        log::info!("Updating the component {}", self.node_ref.strong_count());
         let mut root = self.component.render();
         if let Some(node) = root.apply(&self.element, None, self.last_frame) {
+            log::info!("using set for rendering! {}", self.node_ref.strong_count());
             self.node_ref.set(Some(node));
         } else if let VNode::VComp(child) = &root {
             // If the root VNode is a VComp, we won't have access to the rendered DOM node
             // because components render asynchronously. In order to bubble up the DOM node
             // from the VComp, we need to link the currently rendering component with its
             // root child component.
+            log::info!("Rendering child component async! {}", self.node_ref.strong_count());
             self.node_ref.link(child.node_ref.clone());
         }
         self.last_frame = Some(root);
